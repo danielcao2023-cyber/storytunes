@@ -163,6 +163,7 @@ export function BookReader({ book }: BookReaderProps) {
       >
         <PageContent
           imageUrl={page.imageUrl}
+          imagePrompt={page.imagePrompt}
           text={page.text}
           rhythmText={page.rhythmText}
           rhythmBeats={page.rhythmBeats}
