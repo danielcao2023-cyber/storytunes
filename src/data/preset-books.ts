@@ -1,4 +1,4 @@
-import { Book } from '@/types';
+import { Book, BookLevel } from '@/types';
 
 export const PRESET_BOOKS: Omit<
   Book,
@@ -263,3 +263,28 @@ export const PRESET_BOOKS: Omit<
     ],
   },
 ];
+
+export function getLocalPresetBooks(level?: BookLevel): Book[] {
+  const now = new Date().toISOString();
+  let books = PRESET_BOOKS.map((b) => ({
+    ...b,
+    createdAt: now,
+    readCount: 0,
+  })) as Book[];
+
+  if (level) {
+    books = books.filter((b) => b.level === level);
+  }
+
+  return books;
+}
+
+export function getLocalPresetBook(id: string): Book | null {
+  const book = PRESET_BOOKS.find((b) => b.id === id);
+  if (!book) return null;
+  return {
+    ...book,
+    createdAt: new Date().toISOString(),
+    readCount: 0,
+  } as Book;
+}

@@ -4,6 +4,11 @@ import { sessionOptions } from '@/lib/session';
 import { UserSession } from '@/types';
 
 export async function middleware(request: NextRequest) {
+  // Dev mode: no password configured → skip auth entirely
+  if (!process.env.SESSION_SECRET || !process.env.FAMILY_PASSWORD) {
+    return NextResponse.next();
+  }
+
   const response = NextResponse.next();
   const session = await getIronSession<UserSession>(request, response, sessionOptions);
 
