@@ -44,7 +44,7 @@ export default function CreatePage() {
 
       const book = await res.json();
 
-      fetch('/api/stories/generate-images', {
+      fetch('/api/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookId: book.id }),
