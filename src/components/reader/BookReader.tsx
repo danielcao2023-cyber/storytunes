@@ -78,14 +78,37 @@ export function BookReader({ book }: BookReaderProps) {
     fetch(`/api/stories/${book.id}`, { method: 'PATCH' }).catch(() => {});
   }, [book.id]);
 
-  // Play audio when page changes
+  // Speak current page text or audio
   useEffect(() => {
     if (audioMode === 'none') return;
+
+    // Try pre-generated audio first (Azure TTS)
     if (page.audioUrl) {
       const audio = new Audio(page.audioUrl);
-      audio.play().catch(() => {});
+      audio.play().catch(() => speakWithWebSpeech());
+    } else {
+      speakWithWebSpeech();
     }
-  }, [currentPage, audioMode, page.audioUrl]);
+
+    function speakWithWebSpeech() {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const text = audioMode === 'chant' && page.rhythmText
+        ? page.rhythmText.replace(/\n/g, '. ')
+        : page.text;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = audioMode === 'chant' ? 0.7 : 0.85;
+      utterance.pitch = audioMode === 'chant' ? 1.2 : 1.0;
+      // Try to pick a child-friendly voice
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Samantha'))
+        || voices.find(v => v.lang.startsWith('en-US'))
+        || voices.find(v => v.lang.startsWith('en'));
+      if (englishVoice) utterance.voice = englishVoice;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [currentPage, audioMode, page.audioUrl, page.text, page.rhythmText]);
 
   if (isComplete) {
     return <CompletionScreen book={book} />;
@@ -145,6 +168,7 @@ export function BookReader({ book }: BookReaderProps) {
           rhythmBeats={page.rhythmBeats}
           audioMode={audioMode}
           isActive={true}
+          pageIndex={currentPage}
         />
       </div>
 

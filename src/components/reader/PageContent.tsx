@@ -7,7 +7,19 @@ interface PageContentProps {
   rhythmBeats?: string;
   audioMode: 'none' | 'read' | 'chant';
   isActive: boolean;
+  pageIndex?: number;
 }
+
+const GRADIENTS = [
+  'from-amber-100 via-orange-50 to-yellow-100',
+  'from-sky-100 via-blue-50 to-cyan-100',
+  'from-emerald-100 via-green-50 to-teal-100',
+  'from-rose-100 via-pink-50 to-purple-100',
+  'from-violet-100 via-indigo-50 to-blue-100',
+  'from-lime-100 via-green-50 to-emerald-100',
+  'from-fuchsia-100 via-pink-50 to-rose-100',
+  'from-teal-100 via-cyan-50 to-sky-100',
+];
 
 export function PageContent({
   imageUrl,
@@ -15,11 +27,13 @@ export function PageContent({
   rhythmText,
   rhythmBeats,
   audioMode,
+  pageIndex = 0,
 }: PageContentProps) {
   const displayText =
     audioMode === 'chant' && rhythmText ? rhythmText : text;
   const beats =
     audioMode === 'chant' && rhythmBeats ? rhythmBeats.split(' ') : [];
+  const gradient = GRADIENTS[pageIndex % GRADIENTS.length];
 
   return (
     <div className="flex h-full">
@@ -32,8 +46,10 @@ export function PageContent({
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="text-8xl animate-pulse">🎨</div>
+          <div className={`w-full h-full flex items-center justify-center bg-gradient-to-br ${gradient}`}>
+            <span className="text-8xl opacity-30 select-none">
+              {['🐱','🐕','🦖','🚗','🍎','🌈','🔢','🛁'][pageIndex % 8]}
+            </span>
           </div>
         )}
       </div>
