@@ -78,34 +78,72 @@ export function BookReader({ book }: BookReaderProps) {
     fetch(`/api/stories/${book.id}`, { method: 'PATCH' }).catch(() => {});
   }, [book.id]);
 
-  // Speak current page text or audio
+  // Speak current page — try Azure TTS first, fall back to Web Speech
   useEffect(() => {
     if (audioMode === 'none') return;
 
-    // Try pre-generated audio first (Azure TTS)
+    let cancelled = false;
+
+    // Pre-generated audio (from earlier TTS generation)
     if (page.audioUrl) {
       const audio = new Audio(page.audioUrl);
-      audio.play().catch(() => speakWithWebSpeech());
-    } else {
-      speakWithWebSpeech();
+      audio.play().catch(() => {
+        if (!cancelled) speakWithWebSpeech();
+      });
+      return () => { cancelled = true; };
     }
+
+    // Fetch Azure TTS from server
+    const text = audioMode === 'chant' && page.rhythmText
+      ? page.rhythmText.replace(/\n/g, '. ')
+      : page.text;
+
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, mode: audioMode }),
+    })
+      .then((res) => {
+        if (!res.ok || !res.headers.get('Content-Type')?.includes('audio')) {
+          throw new Error('TTS not available');
+        }
+        return res.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.play().catch(() => speakWithWebSpeech());
+        audio.onended = () => URL.revokeObjectURL(url);
+      })
+      .catch(() => {
+        if (!cancelled) speakWithWebSpeech();
+      });
+
+    return () => { cancelled = true; };
 
     function speakWithWebSpeech() {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
-      const text = audioMode === 'chant' && page.rhythmText
-        ? page.rhythmText.replace(/\n/g, '. ')
-        : page.text;
-      const utterance = new SpeechSynthesisUtterance(text);
+      const utterance = new SpeechSynthesisUtterance(
+        audioMode === 'chant' && page.rhythmText
+          ? page.rhythmText.replace(/\n/g, '. ')
+          : page.text
+      );
       utterance.lang = 'en-US';
       utterance.rate = audioMode === 'chant' ? 0.7 : 0.85;
       utterance.pitch = audioMode === 'chant' ? 1.2 : 1.0;
-      // Try to pick a child-friendly voice
+      // Try to pick the best English voice available
       const voices = window.speechSynthesis.getVoices();
-      const englishVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Samantha'))
-        || voices.find(v => v.lang.startsWith('en-US'))
-        || voices.find(v => v.lang.startsWith('en'));
-      if (englishVoice) utterance.voice = englishVoice;
+      const preferred = voices.find(
+        (v) => v.lang === 'en-US' && v.name.includes('Samantha')
+      );
+      const fallback =
+        voices.find((v) => v.lang === 'en-US' && !v.localService) ||
+        voices.find((v) => v.lang === 'en-US') ||
+        voices.find((v) => v.lang.startsWith('en'));
+      if (preferred) utterance.voice = preferred;
+      else if (fallback) utterance.voice = fallback;
       window.speechSynthesis.speak(utterance);
     }
   }, [currentPage, audioMode, page.audioUrl, page.text, page.rhythmText]);
