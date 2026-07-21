@@ -47,7 +47,7 @@ export default function CreatePage() {
       fetch('/api/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId: book.id }),
+        body: JSON.stringify({ book }),
       }).catch(console.error);
 
       router.push(`/read/${book.id}`);

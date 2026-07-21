@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBook } from '@/lib/books';
-import { supabase } from '@/lib/supabase';
 import { generateImage } from '@/lib/ai/image';
 import { uploadToCloudinary } from '@/lib/cloudinary';
+import { Book } from '@/types';
 
 export async function POST(request: NextRequest) {
-  const { bookId } = await request.json();
+  const { bookId, book: bookInput } = await request.json();
 
-  const book = await getBook(bookId);
+  let book: Book | null = null;
+
+  // Accept either bookId (lookup from DB) or full book object (no-DB mode)
+  if (bookInput) {
+    // Direct book object — works without Supabase
+    book = { ...bookInput, pages: [...bookInput.pages] };
+  } else if (bookId) {
+    try {
+      book = await getBook(bookId);
+    } catch {
+      // Supabase not configured
+    }
+  }
+
   if (!book) {
     return NextResponse.json({ error: 'Book not found' }, { status: 404 });
   }
@@ -19,7 +32,7 @@ export async function POST(request: NextRequest) {
       const imageUrl = await generateImage(updatedPages[i].imagePrompt);
       const cloudinaryUrl = await uploadToCloudinary(
         imageUrl,
-        `storytunes/${bookId}/page-${i}`
+        `storytunes/${book.id}/page-${i}`
       );
       updatedPages[i] = { ...updatedPages[i], imageUrl: cloudinaryUrl };
     } catch (err) {
@@ -28,10 +41,17 @@ export async function POST(request: NextRequest) {
   }
 
   const coverImageUrl = updatedPages[0]?.imageUrl || '';
-  await supabase
-    .from('books')
-    .update({ pages: updatedPages, cover_image_url: coverImageUrl })
-    .eq('id', bookId);
+
+  // Try to persist to Supabase if configured
+  try {
+    const { supabase } = await import('@/lib/supabase');
+    await supabase
+      .from('books')
+      .update({ pages: updatedPages, cover_image_url: coverImageUrl })
+      .eq('id', book.id);
+  } catch {
+    // Supabase not configured — skip persistence
+  }
 
   return NextResponse.json({ ...book, pages: updatedPages, coverImageUrl });
 }
