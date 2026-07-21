@@ -12,7 +12,7 @@ import { createClient } from '@supabase/supabase-js';
 function createSupabaseClient() {
   if (!IS_CONFIGURED) {
     return new Proxy({} as ReturnType<typeof createClient>, {
-      get(_target, _key) {
+      get() {
         return () => {
           throw new Error('Supabase not configured');
         };
