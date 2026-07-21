@@ -8,15 +8,6 @@ const IS_SUPABASE_CONFIGURED =
   !SUPABASE_URL.includes('your-project') &&
   !SUPABASE_URL.includes('placeholder');
 
-// Lazy-load supabase only when configured
-async function getSupabase() {
-  if (!IS_SUPABASE_CONFIGURED) {
-    throw new Error('Supabase not configured');
-  }
-  const { supabase } = await import('./supabase');
-  return supabase;
-}
-
 export async function getBooks(level?: BookLevel): Promise<Book[]> {
   if (!IS_SUPABASE_CONFIGURED) return [];
 
