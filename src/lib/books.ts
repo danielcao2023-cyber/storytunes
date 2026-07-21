@@ -1,8 +1,26 @@
-import { supabase } from './supabase';
 import { Book, BookLevel } from '@/types';
 import { nanoid } from 'nanoid';
 
+// Check if Supabase is actually configured
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const IS_SUPABASE_CONFIGURED =
+  SUPABASE_URL &&
+  !SUPABASE_URL.includes('your-project') &&
+  !SUPABASE_URL.includes('placeholder');
+
+// Lazy-load supabase only when configured
+async function getSupabase() {
+  if (!IS_SUPABASE_CONFIGURED) {
+    throw new Error('Supabase not configured');
+  }
+  const { supabase } = await import('./supabase');
+  return supabase;
+}
+
 export async function getBooks(level?: BookLevel): Promise<Book[]> {
+  if (!IS_SUPABASE_CONFIGURED) return [];
+
+  const supabase = await import('./supabase').then((m) => m.supabase);
   let query = supabase
     .from('books')
     .select('*')
@@ -21,6 +39,9 @@ export async function getBooks(level?: BookLevel): Promise<Book[]> {
 }
 
 export async function getBook(id: string): Promise<Book | null> {
+  if (!IS_SUPABASE_CONFIGURED) return null;
+
+  const supabase = await import('./supabase').then((m) => m.supabase);
   const { data, error } = await supabase
     .from('books')
     .select('*')
@@ -37,6 +58,18 @@ export async function getBook(id: string): Promise<Book | null> {
 export async function createBook(
   book: Omit<Book, 'createdAt' | 'lastReadAt' | 'readCount'>
 ): Promise<Book> {
+  if (!IS_SUPABASE_CONFIGURED) {
+    // Return the book as-is (no persistence in dev mode)
+    const newBook: Book = {
+      ...book,
+      id: book.id || nanoid(),
+      createdAt: new Date().toISOString(),
+      readCount: 0,
+    };
+    return newBook;
+  }
+
+  const supabase = await import('./supabase').then((m) => m.supabase);
   const newBook: Book = {
     ...book,
     id: book.id || nanoid(),
@@ -53,6 +86,9 @@ export async function createBook(
 }
 
 export async function deleteBook(id: string): Promise<void> {
+  if (!IS_SUPABASE_CONFIGURED) return;
+
+  const supabase = await import('./supabase').then((m) => m.supabase);
   const { error } = await supabase.from('books').delete().eq('id', id);
   if (error) {
     console.error('Failed to delete book:', error);
@@ -60,6 +96,9 @@ export async function deleteBook(id: string): Promise<void> {
 }
 
 export async function updateReadProgress(id: string): Promise<void> {
+  if (!IS_SUPABASE_CONFIGURED) return;
+
+  const supabase = await import('./supabase').then((m) => m.supabase);
   const { data: book } = await supabase
     .from('books')
     .select('read_count')

@@ -2,12 +2,14 @@ import { getIronSession, SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import { UserSession } from '@/types';
 
+const SESSION_PASSWORD = process.env.SESSION_SECRET || 'dev-mode-fallback-password-32chars';
+
 export const sessionOptions: SessionOptions = {
-  password: process.env.SESSION_SECRET!,
+  password: SESSION_PASSWORD,
   cookieName: 'storytunes-session',
   cookieOptions: {
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: 60 * 60 * 24 * 30,
   },
 };
 
@@ -17,7 +19,9 @@ export async function getSession() {
 }
 
 export async function login(password: string): Promise<boolean> {
-  if (password !== process.env.FAMILY_PASSWORD) return false;
+  const familyPassword = process.env.FAMILY_PASSWORD;
+  if (!familyPassword) return true; // No password set = anyone can log in
+  if (password !== familyPassword) return false;
   const session = await getSession();
   session.isLoggedIn = true;
   await session.save();
