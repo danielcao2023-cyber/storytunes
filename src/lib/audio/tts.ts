@@ -1,23 +1,26 @@
-import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
-
-const speechConfig = sdk.SpeechConfig.fromSubscription(
-  process.env.AZURE_SPEECH_KEY!,
-  process.env.AZURE_SPEECH_REGION!
-);
-
-speechConfig.speechSynthesisVoiceName = 'en-US-JennyNeural';
-speechConfig.speechSynthesisOutputFormat =
-  sdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3;
-
 export async function generateAudio(
   text: string,
   mode: 'read' | 'chant'
 ): Promise<Buffer | null> {
+  const key = process.env.AZURE_SPEECH_KEY;
+  const region = process.env.AZURE_SPEECH_REGION;
+
+  if (!key || !region || key.includes('your-')) {
+    return null; // Not configured — caller should use Web Speech fallback
+  }
+
+  // Dynamic import to avoid build-time initialization
+  const sdk = await import('microsoft-cognitiveservices-speech-sdk');
+
+  const speechConfig = sdk.SpeechConfig.fromSubscription(key, region);
+  speechConfig.speechSynthesisVoiceName = 'en-US-JennyNeural';
+  speechConfig.speechSynthesisOutputFormat =
+    sdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3;
+
   return new Promise((resolve) => {
     const synthesizer = new sdk.SpeechSynthesizer(speechConfig);
 
     let ssml: string;
-
     if (mode === 'chant') {
       const lines = text
         .split('\n')
