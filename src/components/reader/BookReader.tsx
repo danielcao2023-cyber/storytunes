@@ -11,14 +11,88 @@ interface BookReaderProps {
   book: Book;
 }
 
-export function BookReader({ book }: BookReaderProps) {
+export function BookReader({ book: initialBook }: BookReaderProps) {
+  const [book, setBook] = useState(initialBook);
   const [currentPage, setCurrentPage] = useState(0);
   const [audioMode, setAudioMode] = useState<'none' | 'read' | 'chant'>('read');
   const [isAnimating, setIsAnimating] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [isIllustrating, setIsIllustrating] = useState(false);
+  const [illustrationProgress, setIllustrationProgress] = useState(0);
 
   const totalPages = book.pages.length;
   const page = book.pages[currentPage];
+  const needsIllustration = book.pages.some((p) => !p.imageUrl) && !isIllustrating;
+
+  // Check localStorage for cached illustrations on mount
+  useEffect(() => {
+    if (!book.pages.some((p) => !p.imageUrl)) return;
+    try {
+      const cached = localStorage.getItem(`storytunes-images-${book.id}`);
+      if (cached) {
+        const images = JSON.parse(cached) as string[];
+        setBook((prev) => ({
+          ...prev,
+          pages: prev.pages.map((p, i) =>
+            images[i] ? { ...p, imageUrl: images[i] } : p
+          ),
+        }));
+      }
+    } catch {
+      // localStorage unavailable or corrupted, just generate fresh
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-generate illustrations for preset books that lack them, BUT
+  // only after user explicitly confirms (don't spend API quota silently)
+  const startIllustrating = useCallback(async () => {
+    if (isIllustrating) return;
+    setIsIllustrating(true);
+    setIllustrationProgress(0);
+
+    try {
+      // Call /api/images with book object directly (no Supabase needed)
+      const res = await fetch('/api/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ book }),
+      });
+      if (!res.ok) throw new Error('Illustration generation failed');
+      const result = await res.json();
+      const newPages = result.pages as typeof book.pages;
+
+      setBook((prev) => ({
+        ...prev,
+        pages: newPages,
+        coverImageUrl: result.coverImageUrl || prev.coverImageUrl,
+      }));
+      setIllustrationProgress(newPages.length);
+
+      // Cache in localStorage
+      try {
+        localStorage.setItem(
+          `storytunes-images-${book.id}`,
+          JSON.stringify(newPages.map((p) => p.imageUrl))
+        );
+      } catch {
+        // localStorage full or unavailable — that's fine, just won't cache
+      }
+    } catch (err) {
+      console.error('Failed to generate illustrations:', err);
+    } finally {
+      setIsIllustrating(false);
+    }
+  }, [book, isIllustrating]);
+
+  // Show progress updates during generation
+  useEffect(() => {
+    if (!isIllustrating) return;
+    const interval = setInterval(() => {
+      setIllustrationProgress((p) => Math.min(p + 1, totalPages));
+    }, 4000); // Rough estimate: ~4s per image
+    return () => clearInterval(interval);
+  }, [isIllustrating, totalPages]);
 
   const goToNext = useCallback(() => {
     if (currentPage < totalPages - 1 && !isAnimating) {
@@ -194,6 +268,27 @@ export function BookReader({ book }: BookReaderProps) {
       </div>
 
       {/* Page content */}
+      {needsIllustration && (
+        <div className="text-center py-2 bg-amber-900/40 border-b border-amber-500/20">
+          <button
+            onClick={startIllustrating}
+            className="inline-flex items-center gap-2 px-6 py-2 bg-amber-500 hover:bg-amber-400 text-white rounded-full font-bold text-sm transition-colors"
+          >
+            🎨 Generate Illustrations
+          </button>
+          <span className="text-amber-300/60 text-xs ml-3">
+            Uses AI to create pictures for every page
+          </span>
+        </div>
+      )}
+      {isIllustrating && (
+        <div className="text-center py-2 bg-sky-900/40 border-b border-sky-500/20">
+          <span className="inline-flex items-center gap-2 text-sky-300 text-sm">
+            <span className="w-4 h-4 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+            Painting illustrations... {illustrationProgress}/{totalPages} pages
+          </span>
+        </div>
+      )}
       <div
         className={`flex-1 transition-opacity duration-300 ${
           isAnimating ? 'opacity-60' : 'opacity-100'
