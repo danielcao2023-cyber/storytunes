@@ -26,17 +26,24 @@ export async function POST(request: NextRequest) {
   }
 
   const updatedPages = [...book.pages];
+  const errors: string[] = [];
 
   for (let i = 0; i < updatedPages.length; i++) {
     try {
       const imageUrl = await generateImage(updatedPages[i].imagePrompt);
-      const cloudinaryUrl = await uploadToCloudinary(
-        imageUrl,
-        `storytunes/${book.id}/page-${i}`
-      );
-      updatedPages[i] = { ...updatedPages[i], imageUrl: cloudinaryUrl };
-    } catch (err) {
-      console.error(`Failed to generate image for page ${i}:`, err);
+      if (imageUrl) {
+        const cloudinaryUrl = await uploadToCloudinary(
+          imageUrl,
+          `storytunes/${book.id}/page-${i}`
+        );
+        updatedPages[i] = { ...updatedPages[i], imageUrl: cloudinaryUrl };
+      } else {
+        errors.push(`Page ${i}: empty image URL`);
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      console.error(`Failed to generate image for page ${i}:`, msg);
+      errors.push(`Page ${i}: ${msg}`);
     }
   }
 
@@ -53,5 +60,5 @@ export async function POST(request: NextRequest) {
     // Supabase not configured — skip persistence
   }
 
-  return NextResponse.json({ ...book, pages: updatedPages, coverImageUrl });
+  return NextResponse.json({ ...book, pages: updatedPages, coverImageUrl, errors });
 }

@@ -1,24 +1,42 @@
-const QWEN_API_BASE =
-  'https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation';
+const QWEN_API =
+  'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
 
 export async function generateImage(prompt: string): Promise<string> {
-  const response = await fetch(QWEN_API_BASE, {
+  const apiKey = process.env.QWEN_IMAGE_API_KEY;
+
+  if (!apiKey || apiKey.includes('your-')) {
+    return ''; // Not configured — will use placeholder
+  }
+
+  const body = {
+    model: 'qwen-image-2.0',
+    input: {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              text: `Children's book illustration, watercolor style, warm colors, cute, simple composition. No text, no words. ${prompt}`,
+            },
+          ],
+        },
+      ],
+    },
+    parameters: {
+      size: '1024*1024',
+      n: 1,
+      prompt_extend: true,
+      watermark: false,
+    },
+  };
+
+  const response = await fetch(QWEN_API, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.QWEN_IMAGE_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'X-DashScope-Async': 'enable',
     },
-    body: JSON.stringify({
-      model: 'qwen-image-2.0',
-      input: {
-        prompt: `Children's book illustration, watercolor style, warm colors, cute, simple composition. No text, no words. ${prompt}`,
-      },
-      parameters: {
-        size: '1024*1024',
-        n: 1,
-      },
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -28,25 +46,39 @@ export async function generateImage(prompt: string): Promise<string> {
 
   const data = await response.json();
 
-  if (data.output?.task_id) {
-    return pollTaskResult(data.output.task_id);
+  // Check for sync mode output with base64 image
+  const choices = data.output?.choices;
+  if (choices) {
+    for (const choice of choices) {
+      for (const content of choice.message?.content || []) {
+        if (content.image) {
+          return `data:image/png;base64,${content.image}`;
+        }
+        if (content.image_url?.url) {
+          return content.image_url.url;
+        }
+      }
+    }
   }
 
-  return data.output?.results?.[0]?.url || '';
+  // Fallback: check for async task
+  if (data.output?.task_id) {
+    return pollTaskResult(data.output.task_id, apiKey);
+  }
+
+  return '';
 }
 
-async function pollTaskResult(taskId: string): Promise<string> {
+async function pollTaskResult(taskId: string, apiKey: string): Promise<string> {
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 2000));
 
     const response = await fetch(
       `https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.QWEN_IMAGE_API_KEY}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${apiKey}` } }
     );
+
+    if (!response.ok) continue;
 
     const data = await response.json();
 
